@@ -1,0 +1,116 @@
+/**
+ * audioDownloadService.ts
+ * Gerencia o download do stream de áudio do YouTube e o salva em disco.
+ * Exibe barra de progresso no terminal durante o download.
+ */
+
+import ytdl from '@distube/ytdl-core';
+import fs from 'fs-extra';
+import path from 'path';
+import logger from '../utils/logger';
+import { sanitizeFilename } from '../utils/sanitizeFilename';
+
+/** Opções para o download de áudio. */
+export interface DownloadOptions {
+  /** URL pública do vídeo. */
+  url: string;
+  /** Itag do formato de áudio selecionado. */
+  itag: number;
+  /** Título do vídeo (usado como nome base do arquivo). */
+  title: string;
+  /** Extensão do arquivo (ex: 'webm', 'm4a', 'opus'). */
+  extension: string;
+}
+
+/** Resultado do download. */
+export interface DownloadResult {
+  /** Caminho completo do arquivo salvo. */
+  filePath: string;
+  /** Tamanho final do arquivo em bytes. */
+  fileSizeBytes: number;
+}
+
+/**
+ * Realiza o download do stream de áudio e salva no diretório `downloads/`.
+ * Exibe o progresso percentual no terminal em tempo real.
+ *
+ * @param options - Opções do download.
+ * @returns Resultado com o caminho do arquivo salvo e seu tamanho.
+ */
+export async function downloadAudio(options: DownloadOptions): Promise<DownloadResult> {
+  const { url, itag, title, extension } = options;
+
+  // Prepara o diretório de saída
+  const downloadsDir = path.resolve(process.cwd(), 'downloads');
+  await fs.ensureDir(downloadsDir);
+
+  // Sanitiza o título para uso seguro como nome de arquivo
+  const safeName = sanitizeFilename(title);
+  const filePath = path.join(downloadsDir, `${safeName}.${extension}`);
+
+  logger.info(`Iniciando download: "${title}" → ${filePath}`);
+
+  return new Promise<DownloadResult>((resolve, reject) => {
+    const stream = ytdl(url, {
+      quality: itag,
+      filter: 'audioonly',
+    });
+
+    let downloadedBytes = 0;
+    let totalBytes = 0;
+
+    // Obtém o tamanho total do arquivo para calcular progresso
+    stream.on('info', (_info: ytdl.videoInfo, format: ytdl.videoFormat) => {
+      totalBytes = parseInt(String(format.contentLength ?? '0'), 10);
+    });
+
+    // Atualiza o progresso a cada chunk recebido
+    stream.on('data', (chunk: Buffer) => {
+      downloadedBytes += chunk.length;
+      if (totalBytes > 0) {
+        const percent = ((downloadedBytes / totalBytes) * 100).toFixed(1);
+        // Usa \r para sobrescrever a linha anterior no terminal
+        process.stdout.write(`\r  Progresso: ${percent}% (${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)})`);
+      } else {
+        process.stdout.write(`\r  Baixado: ${formatBytes(downloadedBytes)}`);
+      }
+    });
+
+    stream.on('error', (err: Error) => {
+      logger.error(`Erro durante o download: ${err.message}`);
+      reject(new Error(`Falha no download: ${err.message}`));
+    });
+
+    // Cria o arquivo de saída e conecta o stream
+    const fileStream = fs.createWriteStream(filePath);
+
+    stream.pipe(fileStream);
+
+    fileStream.on('finish', async () => {
+      // Quebra a linha após a barra de progresso
+      process.stdout.write('\n');
+
+      const stat = await fs.stat(filePath);
+      logger.info(`Download concluído: ${filePath} (${formatBytes(stat.size)})`);
+      resolve({ filePath, fileSizeBytes: stat.size });
+    });
+
+    fileStream.on('error', (err: Error) => {
+      logger.error(`Erro ao salvar o arquivo: ${err.message}`);
+      reject(new Error(`Falha ao salvar o arquivo: ${err.message}`));
+    });
+  });
+}
+
+/**
+ * Formata tamanho em bytes para exibição legível.
+ */
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+  if (bytes >= 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${bytes} B`;
+}
