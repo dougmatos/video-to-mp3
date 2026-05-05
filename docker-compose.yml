@@ -2,6 +2,8 @@ services:
   app:
     build: .
     restart: unless-stopped
+    ports:
+      - "9092:3092"
     expose:
       - "3092"
     volumes:

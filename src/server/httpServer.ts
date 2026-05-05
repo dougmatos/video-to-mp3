@@ -15,9 +15,7 @@ import fs from 'fs-extra';
 
 import logger from '../utils/logger.js';
 import { isValidYouTubeUrl } from '../utils/validateUrl.js';
-import { getVideoInfo, selectBestAudioFormat } from '../services/videoInfoService.js';
-import { downloadAudio } from '../services/audioDownloadService.js';
-import { convertToMp3, isFfmpegAvailable } from '../services/ffmpegService.js';
+import { downloadMp3WithYtDlp } from '../services/ytDlpService.js';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
@@ -268,27 +266,7 @@ async function handleConvert(
   try {
     logger.info(`[web] Iniciando conversão para: ${url}`);
 
-    // Busca metadados do vídeo
-    const videoInfo = await getVideoInfo(url);
-    const bestFormat = selectBestAudioFormat(videoInfo.audioFormats);
-
-    // Faz o download do melhor áudio disponível
-    const { filePath } = await downloadAudio({
-      url,
-      itag: bestFormat.itag,
-      title: videoInfo.title,
-      extension: bestFormat.container,
-    });
-
-    // Converte para MP3 quando o FFmpeg está disponível
-    let finalPath = filePath;
-    const ffmpegOk = await isFfmpegAvailable();
-    if (ffmpegOk) {
-      const { mp3Path } = await convertToMp3(filePath);
-      finalPath = mp3Path;
-    } else {
-      logger.warn('[web] FFmpeg não encontrado — arquivo mantido no formato original.');
-    }
+    const { mp3Path: finalPath } = await downloadMp3WithYtDlp(url);
 
     const filename = path.basename(finalPath);
     logger.info(`[web] Conversão concluída: ${filename}`);

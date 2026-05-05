@@ -10,10 +10,13 @@ COPY src/ ./src/
 RUN npm run build
 
 # ─── Stage 2: production ─────────────────────────────────────────────────────
-FROM node:20-alpine
+FROM node:20-bookworm-slim
 
 # FFmpeg necessário para conversão para MP3
-RUN apk add --no-cache ffmpeg
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg ca-certificates python3 python3-pip \
+    && pip3 install --break-system-packages --no-cache-dir yt-dlp \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
