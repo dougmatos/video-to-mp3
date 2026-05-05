@@ -137,6 +137,99 @@ Os arquivos são salvos na pasta `downloads/` na raiz do projeto.
 
 ---
 
+## 🖥️ Deploy em VPS (Docker + HTTPS)
+
+Esta seção descreve como rodar o projeto em um servidor VPS com HTTPS automático via **Let's Encrypt**, usando **Docker Compose**, **Nginx** como proxy reverso e **Certbot** para gerenciamento de certificados.
+
+### Pré-requisitos no servidor
+
+- **Docker** 24+ e **Docker Compose** v2
+- Porta **80** e **443** abertas no firewall
+- DNS do domínio `yt.dougm.dev` apontando para o IP do VPS
+
+Instale o Docker em Ubuntu/Debian:
+```bash
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+```
+
+### 1. Clone o repositório
+
+```bash
+git clone https://github.com/dougmatos/video-to-mp3.git
+cd video-to-mp3
+```
+
+### 2. Inicialize o certificado Let's Encrypt
+
+O script `init-letsencrypt.sh` verifica se o certificado já existe. Se não existir, ele cria um certificado auto-assinado temporário, sobe o nginx, solicita o certificado real ao Let's Encrypt e recarrega o nginx.
+
+```bash
+# (Opcional) passe seu e-mail para receber alertas de expiração
+chmod +x init-letsencrypt.sh
+./init-letsencrypt.sh seu-email@example.com
+```
+
+> **Atenção:** o DNS do domínio `yt.dougm.dev` precisa estar propagado e apontando para o IP do VPS antes de executar este script.
+
+### 3. Suba todos os serviços
+
+```bash
+docker compose up -d
+```
+
+O servidor web estará acessível em **https://yt.dougm.dev**.
+
+### Serviços em execução
+
+| Serviço  | Descrição                                   | Porta interna |
+|----------|---------------------------------------------|---------------|
+| `app`    | Servidor Node.js (video-to-mp3)             | 3092          |
+| `nginx`  | Proxy reverso (HTTP→HTTPS, roteamento)      | 80, 443       |
+| `certbot`| Renovação automática de certificados SSL    | —             |
+
+### Fluxo de requisição
+
+```
+Usuário → HTTPS :443 → Nginx → HTTP :3092 → App Node.js
+```
+
+O nginx redireciona automaticamente todo o tráfego HTTP (porta 80) para HTTPS (porta 443) e faz o proxy reverso para o app na porta 3092.
+
+### Renovação automática de certificados
+
+O serviço `certbot` renova o certificado automaticamente a cada 12 horas (quando necessário). O `nginx` recarrega sua configuração a cada 6 horas para usar o certificado renovado. Nenhuma intervenção manual é necessária.
+
+Para verificar o status dos serviços:
+```bash
+docker compose ps
+docker compose logs -f app
+```
+
+Para forçar uma renovação imediata do certificado:
+```bash
+docker compose run --rm certbot renew --force-renewal
+docker compose exec nginx nginx -s reload
+```
+
+### Estrutura de arquivos gerada no VPS
+
+```
+video-to-mp3/
+├── certbot/
+│   ├── conf/          # Certificados e configurações SSL
+│   └── www/           # Arquivos temporários de desafio ACME
+├── downloads/         # Áudios convertidos (volume persistente)
+├── logs/              # Logs da aplicação (volume persistente)
+├── nginx/
+│   └── nginx.conf     # Configuração do Nginx
+├── docker-compose.yml
+├── Dockerfile
+└── init-letsencrypt.sh
+```
+
+---
+
 ## 📁 Estrutura do Projeto
 
 ```
@@ -149,13 +242,21 @@ video-to-mp3/
 │   │   ├── videoInfoService.ts     # Busca metadados do vídeo
 │   │   ├── audioDownloadService.ts # Realiza o download do áudio
 │   │   └── ffmpegService.ts        # Conversão para MP3 via FFmpeg
+│   ├── server/
+│   │   └── httpServer.ts           # Servidor HTTP com interface web (porta 3092)
 │   └── utils/
 │       ├── logger.ts               # Logger (Winston)
 │       ├── validateUrl.ts          # Validação de URL do YouTube
 │       └── sanitizeFilename.ts     # Sanitização de nomes de arquivo
+├── nginx/
+│   └── nginx.conf                  # Configuração do Nginx (proxy reverso + HTTPS)
 ├── downloads/                      # Arquivos de áudio baixados
 ├── logs/                           # Logs de erro (gerado em runtime)
 ├── dist/                           # Código compilado (gerado pelo build)
+├── Dockerfile                      # Imagem Docker do app (porta 3092)
+├── docker-compose.yml              # Orquestração: app + nginx + certbot
+├── init-letsencrypt.sh             # Inicializa certificado Let's Encrypt
+├── .dockerignore
 ├── package.json
 ├── tsconfig.json
 └── README.md
@@ -167,9 +268,10 @@ video-to-mp3/
 
 | Script | Descrição |
 |--------|-----------|
-| `npm run dev` | Executa diretamente com `tsx` (sem build) |
+| `npm run dev` | Executa CLI diretamente com `tsx` (sem build) |
+| `npm run web` | Inicia o servidor web na porta 3000 (ou `$PORT`) |
 | `npm run build` | Compila TypeScript para `dist/` |
-| `npm start` | Executa o build compilado |
+| `npm start` | Executa o build compilado (CLI) |
 
 ---
 
@@ -180,7 +282,7 @@ video-to-mp3/
 - ❌ Não remove DRM ou proteções de cópia
 - ❌ Não contorna bloqueios ou paywalls
 - ❌ Não baixa conteúdo de membros ou pago
-- ❌ Não possui interface web ou API pública
+- ✅ Possui interface web acessível via navegador (`npm run web`)
 
 ---
 
