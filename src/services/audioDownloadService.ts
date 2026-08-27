@@ -4,11 +4,14 @@
  * Exibe barra de progresso no terminal durante o download.
  */
 
-import ytdl from '@distube/ytdl-core';
 import fs from 'fs-extra';
 import path from 'path';
-import logger from '../utils/logger';
-import { sanitizeFilename } from '../utils/sanitizeFilename';
+import { Readable } from 'stream';
+import type { ReadableStream as NodeReadableStream } from 'stream/web';
+import logger from '../utils/logger.js';
+import { sanitizeFilename } from '../utils/sanitizeFilename.js';
+import { extractVideoId } from '../utils/validateUrl.js';
+import { getInnertube } from './innertubeClient.js';
 
 /** Opções para o download de áudio. */
 export interface DownloadOptions {
@@ -50,19 +53,32 @@ export async function downloadAudio(options: DownloadOptions): Promise<DownloadR
 
   logger.info(`Iniciando download: "${title}" → ${filePath}`);
 
+  const videoId = extractVideoId(url);
+  if (!videoId) {
+    throw new Error('Não foi possível extrair o ID do vídeo a partir da URL informada.');
+  }
+
+  const innertube = await getInnertube();
+
+  // Busca as informações do vídeo uma única vez, usadas tanto para obter o
+  // tamanho total do formato (progresso) quanto para iniciar o download.
+  let totalBytes = 0;
+  let webStream: NodeReadableStream<Uint8Array>;
+  try {
+    const info = await innertube.getBasicInfo(videoId);
+    const format = info.chooseFormat({ itag });
+    totalBytes = format.content_length ?? 0;
+    webStream = await info.download({ itag });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`Erro ao iniciar o download: ${message}`);
+    throw new Error(`Falha no download: ${message}`);
+  }
+
+  const stream = Readable.fromWeb(webStream);
+
   return new Promise<DownloadResult>((resolve, reject) => {
-    const stream = ytdl(url, {
-      quality: itag,
-      filter: 'audioonly',
-    });
-
     let downloadedBytes = 0;
-    let totalBytes = 0;
-
-    // Obtém o tamanho total do arquivo para calcular progresso
-    stream.on('info', (_info: ytdl.videoInfo, format: ytdl.videoFormat) => {
-      totalBytes = parseInt(String(format.contentLength ?? '0'), 10);
-    });
 
     // Atualiza o progresso a cada chunk recebido
     stream.on('data', (chunk: Buffer) => {

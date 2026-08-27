@@ -5,8 +5,8 @@
  */
 
 import inquirer from 'inquirer';
-import { isValidYouTubeUrl } from '../utils/validateUrl';
-import { VideoInfo, AudioFormat } from '../services/videoInfoService';
+import { isValidYouTubeUrl } from '../utils/validateUrl.js';
+import { VideoInfo, AudioFormat } from '../services/videoInfoService.js';
 
 /**
  * Solicita ao usuário que informe a URL do vídeo do YouTube.

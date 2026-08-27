@@ -13,11 +13,11 @@ import http from 'http';
 import path from 'path';
 import fs from 'fs-extra';
 
-import logger from '../utils/logger';
-import { isValidYouTubeUrl } from '../utils/validateUrl';
-import { getVideoInfo, selectBestAudioFormat } from '../services/videoInfoService';
-import { downloadAudio } from '../services/audioDownloadService';
-import { convertToMp3, isFfmpegAvailable } from '../services/ffmpegService';
+import logger from '../utils/logger.js';
+import { isValidYouTubeUrl } from '../utils/validateUrl.js';
+import { getVideoInfo, selectBestAudioFormat } from '../services/videoInfoService.js';
+import { downloadAudio } from '../services/audioDownloadService.js';
+import { convertToMp3, isFfmpegAvailable } from '../services/ffmpegService.js';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 

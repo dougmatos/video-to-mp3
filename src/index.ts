@@ -12,11 +12,11 @@
  *  7. Exibe o caminho do arquivo final
  */
 
-import logger from './utils/logger';
-import { askForUrl, confirmAuthorization, askForMp3Conversion } from './cli/promptUser';
-import { getVideoInfo, selectBestAudioFormat } from './services/videoInfoService';
-import { downloadAudio } from './services/audioDownloadService';
-import { convertToMp3, isFfmpegAvailable } from './services/ffmpegService';
+import logger from './utils/logger.js';
+import { askForUrl, confirmAuthorization, askForMp3Conversion } from './cli/promptUser.js';
+import { getVideoInfo, selectBestAudioFormat } from './services/videoInfoService.js';
+import { downloadAudio } from './services/audioDownloadService.js';
+import { convertToMp3, isFfmpegAvailable } from './services/ffmpegService.js';
 
 /** Exibe o banner de boas-vindas e aviso legal no início da aplicação. */
 function showBanner(): void {
