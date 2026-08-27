@@ -1,6 +1,6 @@
 # 🎵 video-to-mp3
 
-Ferramenta CLI local em Node.js + TypeScript para download de áudio de vídeos do YouTube **exclusivamente autorizados** — vídeos próprios, de domínio público, com licença compatível ou com permissão explícita do autor.
+Ferramenta em Node.js + TypeScript para baixar áudio MP3 ou vídeo MP4 do YouTube **exclusivamente quando autorizado** — vídeos próprios, de domínio público, com licença compatível ou com permissão explícita do autor.
 
 ---
 
@@ -17,6 +17,7 @@ Ferramenta CLI local em Node.js + TypeScript para download de áudio de vídeos 
 
 ## 📋 Funcionalidades
 
+- ✅ Interface web com escolha entre áudio `.mp3` e vídeo `.mp4`
 - ✅ Solicita URL do YouTube via terminal
 - ✅ Exibe metadados do vídeo (título, canal, duração, licença, formatos disponíveis)
 - ✅ Exige confirmação explícita de autorização antes de qualquer download
@@ -74,6 +75,14 @@ npm install
 ---
 
 ## 🚀 Uso
+
+### Interface web
+
+```bash
+npm run web
+```
+
+Abra `http://localhost:3000`, informe a URL e escolha **Áudio MP3** ou **Vídeo MP4** antes de iniciar o download.
 
 ### Modo de desenvolvimento (sem compilação)
 

@@ -1,12 +1,12 @@
 /**
  * httpServer.ts
  * Servidor HTTP local que fornece uma interface web para converter
- * vídeos do YouTube em MP3.
+ * vídeos do YouTube em MP3 ou MP4.
  *
  * Rotas:
  *  GET  /               → Página HTML com o formulário de conversão
- *  POST /convert        → Inicia o download e a conversão para MP3
- *  GET  /download/:file → Transfere o arquivo MP3 gerado
+ *  POST /convert        → Inicia o processamento no formato escolhido
+ *  GET  /download/:file → Transfere o arquivo gerado
  */
 
 import http from 'http';
@@ -15,7 +15,7 @@ import fs from 'fs-extra';
 
 import logger from '../utils/logger.js';
 import { isValidYouTubeUrl } from '../utils/validateUrl.js';
-import { downloadMp3WithYtDlp } from '../services/ytDlpService.js';
+import { downloadWithYtDlp } from '../services/ytDlpService.js';
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
@@ -67,6 +67,28 @@ const HTML = `<!DOCTYPE html>
     }
     input[type="text"]:focus { border-color: #e74c3c; }
     input[type="text"]::placeholder { color: #444; }
+    .format-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+    .format-option {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.8rem;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #bbb;
+      cursor: pointer;
+      text-transform: none;
+      letter-spacing: normal;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .format-option:has(input:checked) { border-color: #e74c3c; color: #fff; }
+    .format-option input { accent-color: #e74c3c; }
     button#btn {
       margin-top: 1rem;
       width: 100%;
@@ -131,9 +153,9 @@ const HTML = `<!DOCTYPE html>
 </head>
 <body>
   <div class="card">
-    <div class="logo">🎵</div>
-    <h1>video-to-mp3</h1>
-    <p class="subtitle">Cole a URL de um vídeo do YouTube para converter em MP3</p>
+    <div class="logo">🎬</div>
+    <h1>Baixar vídeo do YouTube</h1>
+    <p class="subtitle">Cole a URL e escolha entre áudio MP3 ou vídeo MP4</p>
 
     <label for="url">URL do YouTube</label>
     <input
@@ -144,7 +166,18 @@ const HTML = `<!DOCTYPE html>
       spellcheck="false"
     />
 
-    <button id="btn" onclick="convert()">▶ Converter para MP3</button>
+    <div class="format-options" role="radiogroup" aria-label="Formato do arquivo">
+      <label class="format-option">
+        <input type="radio" name="format" value="mp3" checked />
+        <span>🎵 Áudio MP3</span>
+      </label>
+      <label class="format-option">
+        <input type="radio" name="format" value="mp4" />
+        <span>🎬 Vídeo MP4</span>
+      </label>
+    </div>
+
+    <button id="btn" onclick="convert()">⬇️ Baixar MP3</button>
 
     <div class="status" id="status"></div>
 
@@ -161,22 +194,29 @@ const HTML = `<!DOCTYPE html>
     const btn      = document.getElementById('btn');
     const statusEl = document.getElementById('status');
 
+    document.querySelectorAll('input[name="format"]').forEach(function(input) {
+      input.addEventListener('change', function() {
+        btn.textContent = '⬇️ Baixar ' + selectedFormat().toUpperCase();
+      });
+    });
+
     urlInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') convert();
     });
 
     async function convert() {
       const url = urlInput.value.trim();
+      const format = selectedFormat();
       if (!url) { showStatus('info', 'Informe a URL do vídeo.'); return; }
 
       btn.disabled = true;
-      showStatus('info', '<span class="spinner"></span> Buscando informações e convertendo… (pode levar alguns minutos)');
+      showStatus('info', '<span class="spinner"></span> Preparando o arquivo ' + format.toUpperCase() + '… (pode levar alguns minutos)');
 
       try {
         const res  = await fetch('/convert', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url }),
+          body: JSON.stringify({ url, format }),
         });
         const data = await res.json();
 
@@ -186,8 +226,8 @@ const HTML = `<!DOCTYPE html>
           const filename = data.filename;
           showStatus(
             'done',
-            '✅ Conversão concluída!<br>' +
-            '<a class="download-btn" href="/download/' + encodeURIComponent(filename) + '" download="' + filename + '">⬇️ Baixar MP3</a>'
+            '✅ Arquivo pronto!<br>' +
+            '<a class="download-btn" href="/download/' + encodeURIComponent(filename) + '" download="' + filename + '">⬇️ Baixar ' + format.toUpperCase() + '</a>'
           );
         }
       } catch (err) {
@@ -196,6 +236,10 @@ const HTML = `<!DOCTYPE html>
       } finally {
         btn.disabled = false;
       }
+    }
+
+    function selectedFormat() {
+      return document.querySelector('input[name="format"]:checked').value;
     }
 
     function showStatus(type, msg) {
@@ -240,7 +284,7 @@ function sendJson(res: http.ServerResponse, statusCode: number, body: unknown): 
 
 /**
  * POST /convert
- * Recebe { url } no corpo JSON, faz o download do áudio e converte para MP3.
+ * Recebe { url, format } no corpo JSON e gera um arquivo MP3 ou MP4.
  * Responde com { filename } em caso de sucesso ou { error } em caso de falha.
  */
 async function handleConvert(
@@ -257,20 +301,26 @@ async function handleConvert(
   }
 
   const url = typeof body.url === 'string' ? body.url.trim() : '';
+  const format = body.format === 'mp4' ? 'mp4' : body.format === 'mp3' ? 'mp3' : null;
 
   if (!url || !isValidYouTubeUrl(url)) {
     sendJson(res, 400, { error: 'URL inválida. Informe uma URL válida do YouTube.' });
     return;
   }
 
-  try {
-    logger.info(`[web] Iniciando conversão para: ${url}`);
+  if (!format) {
+    sendJson(res, 400, { error: 'Formato inválido. Escolha MP3 ou MP4.' });
+    return;
+  }
 
-    const { mp3Path: finalPath } = await downloadMp3WithYtDlp(url);
+  try {
+    logger.info(`[web] Iniciando processamento em ${format.toUpperCase()}: ${url}`);
+
+    const { filePath: finalPath } = await downloadWithYtDlp(url, format);
 
     const filename = path.basename(finalPath);
-    logger.info(`[web] Conversão concluída: ${filename}`);
-    sendJson(res, 200, { filename });
+    logger.info(`[web] Processamento concluído: ${filename}`);
+    sendJson(res, 200, { filename, format });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error(`[web] Erro na conversão: ${message}`);
@@ -293,7 +343,12 @@ async function handleDownload(
 
   try {
     const stat = await fs.stat(filePath);
-    const mimeType = safe.endsWith('.mp3') ? 'audio/mpeg' : 'application/octet-stream';
+    const extension = path.extname(safe).toLowerCase();
+    const mimeType = extension === '.mp3'
+      ? 'audio/mpeg'
+      : extension === '.mp4'
+        ? 'video/mp4'
+        : 'application/octet-stream';
     res.writeHead(200, {
       'Content-Type': mimeType,
       'Content-Disposition': `attachment; filename="${safe}"`,
