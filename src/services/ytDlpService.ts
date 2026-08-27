@@ -13,6 +13,7 @@ export async function downloadMp3WithYtDlp(url: string): Promise<YtDlpResult> {
 
   const args = [
     '--no-playlist',
+    '--force-ipv4',
     '--extract-audio',
     '--audio-format',
     'mp3',

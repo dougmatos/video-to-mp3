@@ -1,5 +1,5 @@
 # ─── Stage 1: build ──────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -10,12 +10,12 @@ COPY src/ ./src/
 RUN npm run build
 
 # ─── Stage 2: production ─────────────────────────────────────────────────────
-FROM node:20-bookworm-slim
+FROM node:22-bookworm-slim
 
 # FFmpeg necessário para conversão para MP3
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg ca-certificates python3 python3-pip \
-    && pip3 install --break-system-packages --no-cache-dir yt-dlp \
+    && pip3 install --break-system-packages --no-cache-dir yt-dlp==2026.8.19 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
