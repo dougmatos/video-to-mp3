@@ -8,7 +8,7 @@
 import ffmpeg from 'fluent-ffmpeg';
 import path from 'path';
 import fs from 'fs-extra';
-import logger from '../utils/logger';
+import logger from '../utils/logger.js';
 
 /** Resultado da conversão para MP3. */
 export interface ConversionResult {
